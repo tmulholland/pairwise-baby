@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Baby Name Pairwise Combined Results</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Manrope:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="hero">
+        <p class="eyebrow">Combined Results</p>
+        <h1>One ranking, filtered to the people you choose.</h1>
+        <p class="hero-copy">
+          Start with everyone included, then click users on or off to see a combined ranking for any subset.
+        </p>
+      </section>
+
+      <section class="panel controls-panel compact-panel">
+        <div class="action-row">
+          <a id="back-to-comparing-link" class="ghost-button nav-link" href="/troy">Back to comparing</a>
+          <a class="ghost-button nav-link" href="/results">View per-user results</a>
+        </div>
+      </section>
+
+      <section class="panel controls-panel">
+        <div class="panel-header compact">
+          <div>
+            <p class="section-label">Filter Users</p>
+            <h2>Include these people in the combined ranking</h2>
+          </div>
+          <span id="combined-selection-summary" class="pill">Loading</span>
+        </div>
+        <div id="user-filter-tabs" class="tab-row"></div>
+      </section>
+
+      <section class="panel rankings-panel">
+        <div class="panel-header">
+          <div>
+            <p class="section-label">Combined Ranking</p>
+            <h2>Average rating across the selected users</h2>
+          </div>
+          <span id="combined-status" class="pill">Loading</span>
+        </div>
+        <p id="combined-meta" class="muted meta-row"></p>
+        <ol id="combined-ranking-list" class="ranking-list"></ol>
+      </section>
+    </main>
+
+    <script src="/static/combined.js"></script>
+  </body>
+</html>

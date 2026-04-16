@@ -5,3 +5,6 @@ node_modules/
 ngrok
 ngrok.tgz
 .DS_Store
+
+.cache/
+.btn-api-key

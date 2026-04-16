@@ -13,14 +13,23 @@
     <link rel="stylesheet" href="/static/styles.css" />
   </head>
   <body>
+    <div id="user-confirm-overlay" class="confirm-overlay hidden">
+      <div class="confirm-dialog">
+        <p class="section-label">Confirm User</p>
+        <h2>Are you <span id="confirm-user-name">/troy</span>?</h2>
+        <p class="hero-copy confirm-copy">
+          This helps avoid saving comparisons under the wrong person.
+        </p>
+        <div class="action-row">
+          <button id="confirm-user-yes" class="solid-button" type="button">Yes, continue</button>
+          <button id="confirm-user-no" class="ghost-button" type="button">Choose another user</button>
+        </div>
+      </div>
+    </div>
+
     <main class="app-shell">
       <section class="hero">
         <p class="eyebrow">Pairwise baby name ranking</p>
-        <h1>Shared name pool, separate rankings, one URL per person.</h1>
-        <p class="hero-copy">
-          Add names once, compare as many times as you want, and open <code>/troy</code>, <code>/grandma</code>,
-          or <code>/paula</code> to rank names for each person.
-        </p>
       </section>
 
       <section class="panel matchup-panel">
@@ -44,9 +53,14 @@
           <button id="choice-right" class="choice-card" type="button"></button>
         </div>
 
-        <div class="meta-row">
+        <div class="meta-row compare-settings-row">
           <p id="comparison-count" class="muted">0 comparisons recorded</p>
+          <label class="toggle-row" for="prioritize-fewer-toggle">
+            <input id="prioritize-fewer-toggle" type="checkbox" />
+            <span>Prioritize names with fewer comparisons</span>
+          </label>
         </div>
+
       </section>
 
       <section class="panel personal-rankings-panel">
@@ -116,6 +130,28 @@
 
         <div class="action-row subdued-action-row">
           <a class="ghost-button nav-link subtle-link" href="/results">View rankings page</a>
+          <a class="ghost-button nav-link subtle-link" href="/combined">View combined ranking</a>
+        </div>
+
+        <div class="manual-compare-panel">
+          <div class="panel-header compact">
+            <div>
+              <p class="section-label">Manual Compare</p>
+              <h3>Pick the exact matchup</h3>
+            </div>
+            <button id="manual-compare-reset" class="ghost-button small" type="button">Random pair</button>
+          </div>
+          <div class="field-grid two-up manual-compare-grid">
+            <label class="field">
+              <span>Left name</span>
+              <select id="manual-left-select"></select>
+            </label>
+            <label class="field">
+              <span>Right name</span>
+              <select id="manual-right-select"></select>
+            </label>
+          </div>
+          <p id="manual-compare-note" class="muted manual-compare-note">Choose two different names to force a specific comparison.</p>
         </div>
       </section>
     </main>

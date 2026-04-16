@@ -73,6 +73,7 @@ textarea {
   line-height: 1.6;
 }
 
+
 .panel {
   background: var(--paper);
   backdrop-filter: blur(12px);
@@ -144,6 +145,21 @@ textarea:focus {
 
 textarea {
   resize: vertical;
+}
+
+
+select {
+  width: 100%;
+  border: 1px solid rgba(98, 87, 79, 0.2);
+  border-radius: 18px;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--ink);
+}
+
+select:focus {
+  outline: 2px solid rgba(180, 79, 51, 0.28);
+  border-color: rgba(180, 79, 51, 0.42);
 }
 
 .inline-form {
@@ -452,4 +468,222 @@ code {
 
 .subtle-link:hover {
   opacity: 1;
+}
+
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(31, 26, 23, 0.42);
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  z-index: 1000;
+}
+
+.confirm-dialog {
+  width: min(520px, 100%);
+  background: var(--paper-strong);
+  border: 1px solid var(--line);
+  border-radius: 28px;
+  padding: 28px;
+  box-shadow: var(--shadow);
+}
+
+.confirm-dialog h2 {
+  margin: 0;
+  font-family: "Fraunces", serif;
+  line-height: 1;
+}
+
+.confirm-copy {
+  margin-top: 14px;
+  margin-bottom: 18px;
+}
+
+.confirm-overlay.hidden {
+  display: none;
+}
+
+.filter-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+}
+
+.filter-tab-user {
+  font-weight: 800;
+}
+
+.filter-tab-status {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.filter-tab.included {
+  background: linear-gradient(180deg, #d97a34, #b44f33);
+  color: white;
+  border: 1px solid rgba(131, 54, 31, 0.28);
+  box-shadow: 0 12px 24px rgba(180, 79, 51, 0.28);
+}
+
+.filter-tab.included .filter-tab-status {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff4ea;
+}
+
+.filter-tab.excluded {
+  background: rgba(125, 113, 103, 0.12);
+  color: rgba(31, 26, 23, 0.64);
+  border: 1px solid rgba(98, 87, 79, 0.16);
+  box-shadow: none;
+}
+
+.filter-tab.excluded .filter-tab-status {
+  background: rgba(98, 87, 79, 0.12);
+  color: rgba(31, 26, 23, 0.58);
+}
+
+.choice-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  text-align: left;
+  min-height: 320px;
+}
+
+.choice-name {
+  display: block;
+  max-width: 100%;
+  line-height: 0.94;
+}
+
+.choice-blurb {
+  display: -webkit-box;
+  margin-top: 18px;
+  max-width: 28ch;
+  min-height: calc(1.5em * 4);
+  overflow: hidden;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  font-family: "Manrope", sans-serif;
+  font-size: 0.96rem;
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.compare-settings-row {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+
+.manual-compare-panel {
+  margin-top: 18px;
+  padding: 18px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.42);
+  border: 1px solid rgba(98, 87, 79, 0.12);
+}
+
+.manual-compare-grid {
+  margin-top: 14px;
+}
+
+.manual-compare-note {
+  margin-top: 12px;
+}
+
+.toggle-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.toggle-row input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+}
+
+
+.choice-popularity {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 14px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(214, 177, 95, 0.18);
+  color: var(--accent-dark);
+  font-family: "Manrope", sans-serif;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.choice-popularity-rank {
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.choice-popularity-detail {
+  opacity: 0.92;
+}
+
+@media (max-width: 800px) {
+  .choice-card {
+    min-height: 260px;
+  }
+
+  .choice-blurb {
+    min-height: calc(1.5em * 3);
+    -webkit-line-clamp: 3;
+  }
+}
+
+.choice-meta-box {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.45);
+  border: 1px solid rgba(98, 87, 79, 0.12);
+}
+
+.choice-meta-row {
+  display: grid;
+  grid-template-columns: 92px 1fr;
+  gap: 10px;
+  align-items: start;
+  width: 100%;
+  font-family: "Manrope", sans-serif;
+  font-size: 0.86rem;
+  line-height: 1.4;
+}
+
+.choice-meta-label {
+  color: var(--accent-dark);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.choice-meta-value {
+  color: var(--muted);
+  font-weight: 600;
 }

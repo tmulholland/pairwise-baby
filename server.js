@@ -1,15 +1,26 @@
 const express = require('express');
 const path = require('path');
 const Database = require('better-sqlite3');
+const { ensureNamePopularityColumns, initializeSsaPopularity, updateSsaPopularityForNames } = require('./ssa-popularity');
+const { ensureNameBtnColumns, initializeBtnMetadata, updateBtnMetadataForNames } = require('./btn-metadata');
 
 const PORT = process.env.PORT || 3000;
 const DEFAULT_RATING = 1200;
 const K_FACTOR = 24;
 const DEFAULT_USER = 'troy';
+const SUMMARY_REFRESH_INTERVAL_MS = 1000 * 60 * 60 * 24 * 30;
+const SUMMARY_FETCH_DELAY_MS = 250;
 const app = express();
 const db = new Database(path.join(__dirname, 'baby-names.db'));
 
+const summaryQueue = [];
+const queuedSummaryIds = new Set();
+let isRefreshingSummaries = false;
+
 initializeDatabase();
+queueSummaryRefreshForAllNames();
+void initializeSsaPopularity(db);
+void initializeBtnMetadata(db);
 
 app.use(express.json());
 app.use('/static', express.static(__dirname, { index: false }));
@@ -22,10 +33,23 @@ app.get('/results', (_req, res) => {
   res.sendFile(path.join(__dirname, 'results.html'));
 });
 
+app.get('/combined', (_req, res) => {
+  res.sendFile(path.join(__dirname, 'combined.html'));
+});
+
 app.get('/api/results', (_req, res) => {
   try {
     ensureRatingsForAllUsers();
     res.json(buildState(DEFAULT_USER));
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
+app.get('/api/combined', (req, res) => {
+  try {
+    ensureRatingsForAllUsers();
+    res.json(buildCombinedState(req.query.users));
   } catch (error) {
     handleError(res, error);
   }
@@ -54,8 +78,11 @@ app.post('/api/users', (req, res) => {
 app.post('/api/names', (req, res) => {
   try {
     const submittedNames = Array.isArray(req.body.names) ? req.body.names : [];
-    addNames(submittedNames);
+    const addedNames = addNames(submittedNames);
     ensureRatingsForAllUsers();
+    queueSummaryRefreshForNames(addedNames);
+    updateSsaPopularityForNames(db, addedNames);
+    updateBtnMetadataForNames(db, addedNames);
     res.status(201).json({ state: buildState(normalizeSlug(req.body.userSlug) || DEFAULT_USER) });
   } catch (error) {
     handleError(res, error);
@@ -140,7 +167,30 @@ function initializeDatabase() {
     );
   `);
 
+  ensureNameSummaryColumns();
+  ensureNamePopularityColumns(db);
+  ensureNameBtnColumns(db);
   ensureUser(DEFAULT_USER);
+}
+
+function ensureNameSummaryColumns() {
+  const columns = new Set(db.prepare('PRAGMA table_info(names)').all().map((column) => column.name));
+
+  if (!columns.has('wiki_summary')) {
+    db.exec("ALTER TABLE names ADD COLUMN wiki_summary TEXT");
+  }
+
+  if (!columns.has('wiki_source_url')) {
+    db.exec("ALTER TABLE names ADD COLUMN wiki_source_url TEXT");
+  }
+
+  if (!columns.has('wiki_status')) {
+    db.exec("ALTER TABLE names ADD COLUMN wiki_status TEXT NOT NULL DEFAULT 'pending'");
+  }
+
+  if (!columns.has('wiki_updated_at')) {
+    db.exec("ALTER TABLE names ADD COLUMN wiki_updated_at TEXT");
+  }
 }
 
 function ensureUser(rawSlug) {
@@ -158,7 +208,9 @@ function ensureUser(rawSlug) {
 }
 
 function addNames(rawNames) {
-  const insert = db.prepare('INSERT OR IGNORE INTO names (name) VALUES (?)');
+  const insert = db.prepare("INSERT OR IGNORE INTO names (name, wiki_status) VALUES (?, 'pending')");
+  const findByName = db.prepare('SELECT id, name FROM names WHERE name = ? COLLATE NOCASE');
+  const addedNames = [];
 
   const transaction = db.transaction((names) => {
     for (const rawName of names) {
@@ -167,11 +219,17 @@ function addNames(rawNames) {
         continue;
       }
 
-      insert.run(name);
+      const result = insert.run(name);
+      const entry = findByName.get(name);
+
+      if (result.changes > 0 && entry) {
+        addedNames.push(entry);
+      }
     }
   });
 
   transaction(rawNames);
+  return addedNames;
 }
 
 function deleteName(nameId) {
@@ -237,7 +295,40 @@ function buildState(activeSlug) {
   ensureRatingsForAllUsers();
 
   const users = db.prepare('SELECT id, slug FROM users ORDER BY slug').all();
-  const names = db.prepare('SELECT id, name FROM names ORDER BY name COLLATE NOCASE').all();
+  const nameComparisonRows = db.prepare(`
+    SELECT name_id, COUNT(*) AS count
+    FROM (
+      SELECT winner_name_id AS name_id
+      FROM comparisons
+      WHERE user_id = ?
+      UNION ALL
+      SELECT loser_name_id AS name_id
+      FROM comparisons
+      WHERE user_id = ?
+    )
+    GROUP BY name_id
+  `).all(activeUser.id, activeUser.id);
+  const nameComparisonCounts = new Map(nameComparisonRows.map((row) => [row.name_id, row.count]));
+  const names = db.prepare(`
+    SELECT id, name, wiki_summary, wiki_source_url, wiki_status, wiki_updated_at, ssa_year, ssa_births, ssa_rank, btn_usage, btn_origin, btn_language_root, btn_status
+    FROM names
+    ORDER BY name COLLATE NOCASE
+  `).all().map((name) => ({
+    id: name.id,
+    name: name.name,
+    summary: name.wiki_summary || '',
+    summarySourceUrl: name.wiki_source_url || '',
+    summaryStatus: name.wiki_status || 'pending',
+    summaryUpdatedAt: name.wiki_updated_at || null,
+    ssaYear: name.ssa_year || null,
+    ssaBirths: name.ssa_births || null,
+    ssaRank: name.ssa_rank || null,
+    btnUsage: name.btn_usage || '',
+    btnOrigin: name.btn_origin || '',
+    btnLanguageRoot: name.btn_language_root || '',
+    btnStatus: name.btn_status || 'pending',
+    comparisonCount: nameComparisonCounts.get(name.id) || 0,
+  }));
   const comparisonRows = db.prepare(`
     SELECT user_id, COUNT(*) AS count
     FROM comparisons
@@ -267,6 +358,252 @@ function buildState(activeSlug) {
     names,
     rankings,
   };
+}
+
+function buildCombinedState(rawSelectedUsers) {
+  const users = db.prepare('SELECT id, slug FROM users ORDER BY slug').all();
+  const names = db.prepare('SELECT id, name FROM names ORDER BY name COLLATE NOCASE').all();
+  const comparisonRows = db.prepare(`
+    SELECT user_id, COUNT(*) AS count
+    FROM comparisons
+    GROUP BY user_id
+  `).all();
+  const comparisonCounts = new Map(comparisonRows.map((row) => [row.user_id, row.count]));
+  const selectedSlugs = resolveSelectedSlugs(rawSelectedUsers, users);
+  const selectedUsers = users.filter((user) => selectedSlugs.includes(user.slug));
+  const ratingRows = selectedUsers.length
+    ? db.prepare(`
+        SELECT ratings.name_id, ratings.rating
+        FROM ratings
+        WHERE ratings.user_id IN (${selectedUsers.map(() => '?').join(', ')})
+      `).all(...selectedUsers.map((user) => user.id))
+    : [];
+
+  const ratingsByNameId = new Map(names.map((name) => [name.id, []]));
+  for (const row of ratingRows) {
+    ratingsByNameId.get(row.name_id).push(row.rating);
+  }
+
+  const combinedNames = names
+    .map((name) => {
+      const selectedRatings = ratingsByNameId.get(name.id) || [];
+      const combinedRating = selectedRatings.length
+        ? selectedRatings.reduce((sum, rating) => sum + rating, 0) / selectedRatings.length
+        : DEFAULT_RATING;
+
+      return {
+        id: name.id,
+        name: name.name,
+        rating: combinedRating,
+      };
+    })
+    .sort((left, right) => right.rating - left.rating || left.name.localeCompare(right.name));
+
+  return {
+    users: users.map((user) => ({
+      slug: user.slug,
+      included: selectedSlugs.includes(user.slug),
+    })),
+    combinedRanking: {
+      selectedUsers: selectedSlugs,
+      userCount: selectedUsers.length,
+      comparisonCount: selectedUsers.reduce((sum, user) => sum + (comparisonCounts.get(user.id) || 0), 0),
+      names: combinedNames,
+    },
+  };
+}
+
+function resolveSelectedSlugs(rawSelectedUsers, users) {
+  const allSlugs = users.map((user) => user.slug);
+  const submittedValues = Array.isArray(rawSelectedUsers) ? rawSelectedUsers : [rawSelectedUsers];
+  const submittedSlugs = submittedValues
+    .flatMap((value) => String(value || '').split(','))
+    .map((value) => normalizeSlug(value))
+    .filter(Boolean);
+
+  if (!submittedSlugs.length) {
+    return allSlugs;
+  }
+
+  return allSlugs.filter((slug) => submittedSlugs.includes(slug));
+}
+
+function queueSummaryRefreshForAllNames() {
+  const names = db.prepare(`
+    SELECT id, wiki_status, wiki_updated_at
+    FROM names
+    ORDER BY id
+  `).all();
+
+  for (const name of names) {
+    if (needsSummaryRefresh(name)) {
+      enqueueSummaryRefresh(name.id);
+    }
+  }
+}
+
+function queueSummaryRefreshForNames(names) {
+  for (const name of names) {
+    if (name && Number.isInteger(name.id)) {
+      enqueueSummaryRefresh(name.id);
+    }
+  }
+}
+
+function enqueueSummaryRefresh(nameId) {
+  if (queuedSummaryIds.has(nameId)) {
+    return;
+  }
+
+  queuedSummaryIds.add(nameId);
+  summaryQueue.push(nameId);
+  void processSummaryQueue();
+}
+
+async function processSummaryQueue() {
+  if (isRefreshingSummaries) {
+    return;
+  }
+
+  isRefreshingSummaries = true;
+
+  while (summaryQueue.length) {
+    const nameId = summaryQueue.shift();
+    queuedSummaryIds.delete(nameId);
+
+    try {
+      await refreshNameSummary(nameId);
+    } catch (error) {
+      console.error(`Unable to refresh summary for name ${nameId}:`, error);
+    }
+
+    await delay(SUMMARY_FETCH_DELAY_MS);
+  }
+
+  isRefreshingSummaries = false;
+}
+
+async function refreshNameSummary(nameId) {
+  const entry = db.prepare(`
+    SELECT id, name, wiki_status, wiki_updated_at
+    FROM names
+    WHERE id = ?
+  `).get(nameId);
+
+  if (!entry || !needsSummaryRefresh(entry)) {
+    return;
+  }
+
+  const summary = await fetchWikipediaSummary(entry.name);
+
+  db.prepare(`
+    UPDATE names
+    SET wiki_summary = ?,
+        wiki_source_url = ?,
+        wiki_status = ?,
+        wiki_updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `).run(summary.summary, summary.sourceUrl, summary.status, nameId);
+}
+
+function needsSummaryRefresh(entry) {
+  if (!entry) {
+    return false;
+  }
+
+  if (!entry.wiki_updated_at) {
+    return true;
+  }
+
+  const updatedAt = Date.parse(entry.wiki_updated_at);
+  if (Number.isNaN(updatedAt)) {
+    return true;
+  }
+
+  return Date.now() - updatedAt > SUMMARY_REFRESH_INTERVAL_MS;
+}
+
+async function fetchWikipediaSummary(name) {
+  const titles = [`${name}_(given_name)`, `${name}_(name)`, name];
+
+  for (const title of titles) {
+    const payload = await fetchWikipediaSummaryPayload(title);
+    if (!payload || !isUsefulNameSummary(payload, title, name)) {
+      continue;
+    }
+
+    const extract = cleanSummary(payload.extract);
+    if (!extract) {
+      continue;
+    }
+
+    return {
+      summary: extract,
+      sourceUrl: payload.content_urls?.desktop?.page || payload.content_urls?.mobile?.page || '',
+      status: 'ready',
+    };
+  }
+
+  return {
+    summary: '',
+    sourceUrl: '',
+    status: 'missing',
+  };
+}
+
+async function fetchWikipediaSummaryPayload(title) {
+  const url = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`;
+
+  try {
+    const response = await fetch(url, {
+      headers: {
+        Accept: 'application/json',
+        'User-Agent': 'pairwise-baby/1.0 (name summary fetch)',
+      },
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    return response.json();
+  } catch (_error) {
+    return null;
+  }
+}
+
+function isUsefulNameSummary(payload, requestedTitle, name) {
+  const canonical = String(payload?.titles?.canonical || payload?.title || '').replace(/ /g, '_');
+  const requested = requestedTitle.replace(/ /g, '_');
+  const normalizedName = name.toLowerCase();
+  const canonicalLower = canonical.toLowerCase();
+  const extractLower = String(payload?.extract || '').toLowerCase();
+
+  if (!canonical || payload?.type === 'disambiguation' || extractLower.includes('may refer to')) {
+    return false;
+  }
+
+  if (requested.endsWith('_(given_name)') || requested.endsWith('_(name)')) {
+    return canonicalLower === requested.toLowerCase();
+  }
+
+  return canonicalLower === normalizedName || canonicalLower.startsWith(`${normalizedName}_(`);
+}
+
+function cleanSummary(value) {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!text) {
+    return '';
+  }
+
+  const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+  const shortText = sentences.slice(0, 2).join(' ').trim();
+  const clipped = shortText.length > 180 ? `${shortText.slice(0, 177).trimEnd()}...` : shortText;
+  return clipped;
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function normalizeSlug(value) {

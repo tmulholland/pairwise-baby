@@ -1,9 +1,13 @@
+const LAST_ACTIVE_USER_KEY = 'baby-name-last-active-user';
+
 const elements = {
   rankingColumns: document.querySelector('#ranking-columns'),
   rankingCardTemplate: document.querySelector('#ranking-card-template'),
   resultsStatus: document.querySelector('#results-status'),
+  backToComparingLink: document.querySelector('#back-to-comparing-link'),
 };
 
+initializePage();
 loadResults();
 
 async function loadResults() {
@@ -94,4 +98,23 @@ function renderError(message) {
 
 function setStatus(message) {
   elements.resultsStatus.textContent = message;
+}
+
+function initializePage() {
+  const activeUser = getLastActiveUser();
+  elements.backToComparingLink.href = `/${activeUser}`;
+}
+
+function getLastActiveUser() {
+  const saved = normalizeSlug(window.localStorage.getItem(LAST_ACTIVE_USER_KEY));
+  return saved || 'troy';
+}
+
+function normalizeSlug(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40);
 }
